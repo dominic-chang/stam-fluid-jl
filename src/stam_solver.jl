@@ -6,7 +6,8 @@ function add_source(x, s, dt)
     end
 end
 
-function set_bnd(M, N, O, b, x)
+function set_bnd(b, x)
+    M, N, O = size(x)
     # bounds are cells at faces of the cube
 
     #setting faces
@@ -73,28 +74,30 @@ function set_bnd(M, N, O, b, x)
     x[M, N, O] = 1.0 / 3.0 * (x[M-1, N, O] + x[M, N-1, O] + x[M, N, O-1])
 end
 
-function linear_solve(M, N, O, b, x, x0, a, c)
+function linear_solve(b, x, x0, a, c)
+    M, N, O = size(x)
     # iterate the solver
     for _ in 1:LINEARSOLVERTIMES
         # update for each cell
         for i in 2:(M-1)
             for j in 2:(N-1)
                 for k in 2:(O-1)
-                    x[i, j, k] = (x0[i, j, k] + a * (x[i - 1, j, k] + x[i + 1, j, k] + x[i, j - 1,k] + x[i, j + 1, k] + x[i, j, k - 1] + x[i, j, k + 1])) / c
+                    x[i, j, k] = 1#(x0[i, j, k] + a * (x[i - 1, j, k] + x[i + 1, j, k] + x[i, j - 1,k] + x[i, j + 1, k] + x[i, j, k - 1] + x[i, j, k + 1])) / c
                 end
             end
         end
-        set_bnd(M, N, O, b, x)
+        set_bnd(b, x)
     end
 end
 
-function diffuse(M, N, O, b, x, x0, diff, dt)
-    mx = max(max(M, N), max(N, O))
+function diffuse(b, x, x0, diff, dt)
+    mx = max(size(x)...)
     a = dt * diff * mx^3
-    linear_solve(M, N, O, b, x, x0, a, 1 + 6 * a)
+    linear_solve(b, x, x0, a, 1 + 6 * a)
 end
 
-function advect(M, N, O, b, d, d0, u, v, w, dt)
+function advect(b, d, d0, u, v, w, dt)
+    M, N, O = size(d)
 
     dtx = dty = dtz = dt * max(max(M, N), max(N, O))
 
@@ -130,10 +133,11 @@ function advect(M, N, O, b, d, d0, u, v, w, dt)
             end
         end
     end
-    set_bnd(M, N, O, b, d)
+    set_bnd(b, d)
 end
 
-function project(M, N, O, u, v, w, p, div)
+function project(u, v, w, p, div)
+    M, N, O = size(u)
 
     for i in 2:(M-1)
         for j in 2:(N-1)
@@ -144,10 +148,10 @@ function project(M, N, O, u, v, w, p, div)
         end
     end
 
-    set_bnd(M, N, O, 0, div)
-    set_bnd(M, N, O, 0, p)
+    set_bnd(0, div)
+    set_bnd(0, p)
 
-    linear_solve(M, N, O, 0, p, div, 1, 6)
+    linear_solve(0, p, div, 1, 6)
 
     for i in 2:(M-1)
         for j in 2:(N-1)
@@ -159,21 +163,21 @@ function project(M, N, O, u, v, w, p, div)
         end
     end
 
-    set_bnd(M, N, O, 1, u)
-    set_bnd(M, N, O, 2, v)
-    set_bnd(M, N, O, 3, w)
+    set_bnd(1, u)
+    set_bnd(2, v)
+    set_bnd(3, w)
 end
 
-function dens_step(M, N, O, x, x0, u, v, w, diff, dt)
+function dens_step(x, x0, u, v, w, diff, dt)
     #add_source(x, x0, dt)
     x .= x0
     x0, x = x, x0
-    diffuse(M, N, O, 0, x, x0, diff, dt)
+    diffuse(0, x, x0, diff, dt)
     x0, x = x, x0   
-    advect(M, N, O, 0, x, x0, u, v, w, dt)
+    #advect(0, x, x0, u, v, w, dt)
 end
 
-function vel_step(M, N, O, u, v, w, u0, v0, w0, visc, dt)
+function vel_step(u, v, w, u0, v0, w0, visc, dt)
     #add_source(u, u0, dt)
     #add_source(v, v0, dt)
     #add_source(w, w0, dt)
@@ -181,17 +185,17 @@ function vel_step(M, N, O, u, v, w, u0, v0, w0, visc, dt)
     v .= v0
     w .= w0
     u0, u = u, u0
-    diffuse(M, N, O, 1, u, u0, visc, dt)
+    diffuse(1, u, u0, visc, dt)
     v0, v = v, v0
-    diffuse(M, N, O, 2, v, v0, visc, dt)
+    diffuse(2, v, v0, visc, dt)
     w0, w = w, w0
-    diffuse(M, N, O, 3, w, w0, visc, dt)
-    project(M, N, O, u, v, w, u0, v0)
+    diffuse(3, w, w0, visc, dt)
+    project(u, v, w, u0, v0)
     u0, u = u, u0
     v0, v = v, v0
     w0, w = w, w0
-    advect(M, N, O, 1, u, u0, u0, v0, w0, dt)
-    advect(M, N, O, 2, v, v0, u0, v0, w0, dt)
-    advect(M, N, O, 3, w, w0, u0, v0, w0, dt)
-    project(M, N, O, u, v, w, u0, v0)
+    advect(1, u, u0, u0, v0, w0, dt)
+    advect(2, v, v0, u0, v0, w0, dt)
+    advect(3, w, w0, u0, v0, w0, dt)
+    project(u, v, w, u0, v0)
 end

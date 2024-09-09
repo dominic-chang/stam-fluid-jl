@@ -1,10 +1,13 @@
+# Julia port of Jos Stam's fluid solver
+# https://www.dgp.toronto.edu/public_user/stam/reality/Research/pdf/GDC03.pdf
+
 using Pkg;Pkg.activate(dirname(@__DIR__))
 using WGLMakie
 WGLMakie.activate!() # hide
 WGLMakie.Makie.inline!(true) # hide
 include("stam_solver.jl")
 
-SIZE = 500
+SIZE = 100
 
 M = SIZE; # grid x
 N = SIZE; # grid y
@@ -98,10 +101,9 @@ function get_force_source(d, u, v, w)
     return
 end
 function sim_main()
-
     #get_force_source( dens_prev, vx_prev, vy_prev, vz_prev );
-    vel_step(M, N, O, vx[], vy[], vz[], vx_prev[], vy_prev[], vz_prev[], visc, dt)
-    dens_step(M, N, O, dens[], dens_prev[], vx[], vy[], vz[], diff, dt)
+    #vel_step(vx[], vy[], vz[], vx_prev[], vy_prev[], vz_prev[], visc, dt)
+    dens_step(dens[], dens_prev[], vx[], vy[], vz[], diff, dt)
 end
 fig = Figure()
 ax = Axis(fig[1, 1], aspect=1)
