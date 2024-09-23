@@ -1,9 +1,14 @@
 import Metal
 using KernelAbstractions
 
-@kernel function add_source!(x, @Const(s), dt)
-    I = @index(Global, NTuple)
-    x[I] += dt * s[I]
+@kernel function _add_source!(x, s, dt)
+    I = @index(Global)
+    @inbounds x[I] += dt*s[I]
+end
+
+function add_source!(x, s, dt)
+    backend = get_backend(x)
+    _add_source!(backend)(x, s, dt, ndrange = length(x)) 
 end
 
 @kernel function set_bnd!(x, b)
@@ -57,20 +62,22 @@ function linear_solve!(x, x0, a, b, c; linearsolvertimes=10)
     end
 end
 
-function diffuse!(x,x0, b, diff, dt)
-    mx = max(size(x)...)
+# Diffuses field x over time dt
+function diffuse!(d, d0, b, diff, dt)
+    mx = max(size(d)...)
     a = dt * diff * mx^2
-    linear_solve!(x, x0, a, b, 1 + 4 * a)
+    linear_solve!(d, d0, a, b, 1 + 4 * a)
 end
 
-@kernel function _advect!(d, d0, u, v, dt::A) where A
+# Advects field d along field (vx, vy) over time dt
+@kernel function _advect!(d, d0, vx, vy, dt::A) where A
     I, J = @index(Global, NTuple)
     T = typeof(I)
     M, N = T.(size(d))
     dtx = dty = dt * A(max(M, N))
     if (1 < I < M) && (1 < J < N)
-        x = A(I) - dtx * u[I, J]
-        y = A(J) - dty * v[I, J]
+        x = A(I) - dtx * vx[I, J]
+        y = A(J) - dty * vy[I, J]
         if x < A(1/2)
             x = A(1/2)
         end
@@ -100,13 +107,13 @@ end
         d[I, J] = s0 * (t0 * d0[i0, j0] + t1 * d0[i0, j1]) + s1 * (t0 * d0[i1, j0] + t1 * d0[i1, j1] )
     end
 end
-function advect!(d, d0, u, v, dt)
+function advect!(d, d0, vx, vy, dt)
     backend = get_backend(d)
     @assert size(d) == size(d0)
     @assert get_backend(d0) == backend
 
     M, N = size(d)
-    _advect!(backend)(d, d0, u, v, dt, ndrange = (M, N))
+    _advect!(backend)(d, d0, vx, vy, dt, ndrange = (M, N))
     set_bnd!(backend)(d, 0, ndrange = (M, N))
 end
 
@@ -148,11 +155,9 @@ function project(u, v, p, div)
 end
 
 function dens_step!(x, x0, u, v, diff, dt)
-    T = eltype(x)
-    #add_source!(x, x0, dt, ndrange = length(x))
-    backend = get_backend(x)
+    #add_source!(x, x0, dt)
     mycopy!(x, x0)
-    x, x0 = x0, x
+    #x, x0 = x0, x
     diffuse!(x, x0, 0, diff, dt)
     x, x0 = x0, x
     advect!(x, x0, u, v, dt)
